@@ -7,18 +7,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { DAYS_OF_WEEK } from '@/lib/constants'
 import type { ClassroomAssignment, Course } from '@/lib/types/database'
+import { formatTime } from '@/lib/utils'
+import { useTermContext } from '@/components/term-selector'
 
 interface AssignmentWithCourse extends ClassroomAssignment {
   course: Course
 }
 
 export default function TutorClassroomPage() {
+  const { selectedTermId } = useTermContext()
   const [assignments, setAssignments] = useState<AssignmentWithCourse[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
+      const supabase = createClient()
       try {
         const { data } = await supabase
           .from('classroom_assignments')
@@ -26,7 +29,12 @@ export default function TutorClassroomPage() {
           .order('day_of_week')
           .order('start_time')
 
-        setAssignments((data as unknown as AssignmentWithCourse[]) || [])
+        // 選択中の会期でフィルタ
+        let filtered = (data as unknown as AssignmentWithCourse[]) || []
+        if (selectedTermId) {
+          filtered = filtered.filter((a) => a.course?.term_id === selectedTermId)
+        }
+        setAssignments(filtered)
       } catch (error) {
         console.error('Error fetching classroom assignments:', error)
       } finally {
@@ -35,7 +43,7 @@ export default function TutorClassroomPage() {
     }
 
     fetchData()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTermId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Group by day
   const assignmentsByDay: Record<string, AssignmentWithCourse[]> = {}
@@ -65,38 +73,43 @@ export default function TutorClassroomPage() {
               <CardTitle>{day}曜日</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>教室</TableHead>
-                    <TableHead>時間</TableHead>
-                    <TableHead>講座名</TableHead>
-                    <TableHead>科目</TableHead>
-                    <TableHead>講師</TableHead>
-                    <TableHead>備考</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dayAssignments.map((assignment) => (
-                    <TableRow key={assignment.id}>
-                      <TableCell>
-                        <Badge className="text-sm">{assignment.classroom}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {assignment.start_time}~{assignment.end_time}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {assignment.course?.name || '-'}
-                      </TableCell>
-                      <TableCell>{assignment.course?.subject || '-'}</TableCell>
-                      <TableCell>{assignment.course?.instructor_name || '-'}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {assignment.notes || '-'}
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>教室</TableHead>
+                      <TableHead className="hidden sm:table-cell">時間</TableHead>
+                      <TableHead>講座名</TableHead>
+                      <TableHead className="hidden sm:table-cell">科目</TableHead>
+                      <TableHead className="hidden md:table-cell">講師</TableHead>
+                      <TableHead className="hidden lg:table-cell">備考</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {dayAssignments.map((assignment) => (
+                      <TableRow key={assignment.id}>
+                        <TableCell>
+                          <Badge className="text-xs">{assignment.classroom}</Badge>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell font-mono text-sm whitespace-nowrap">
+                          {formatTime(assignment.start_time)}~{formatTime(assignment.end_time)}
+                        </TableCell>
+                        <TableCell className="font-medium text-sm">
+                          {assignment.course?.name || '-'}
+                          <div className="sm:hidden text-xs text-muted-foreground mt-0.5">
+                            {formatTime(assignment.start_time)}~{formatTime(assignment.end_time)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm">{assignment.course?.subject || '-'}</TableCell>
+                        <TableCell className="hidden md:table-cell text-sm">{assignment.course?.instructor_name || '-'}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                          {assignment.notes || '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )

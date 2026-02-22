@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/use-auth'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +15,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import type { Course, InstructorNote } from '@/lib/types/database'
 
 export default function InstructorNotesPage() {
-  const { supabase, profile } = useAuth()
+  const { profile } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [notes, setNotes] = useState<(InstructorNote & { course?: Course })[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,19 +30,14 @@ export default function InstructorNotesPage() {
 
   const fetchData = async () => {
     if (!profile) return
+    const supabase = createClient()
     try {
-      const { data: coursesData } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('instructor_id', profile.id)
-      setCourses(coursesData || [])
-
-      const { data: notesData } = await supabase
-        .from('instructor_notes')
-        .select('*, course:courses(*)')
-        .eq('instructor_id', profile.id)
-        .order('created_at', { ascending: false })
-      setNotes(notesData || [])
+      const [coursesRes, notesRes] = await Promise.all([
+        supabase.from('courses').select('*').eq('instructor_id', profile.id),
+        supabase.from('instructor_notes').select('*, course:courses(*)').eq('instructor_id', profile.id).order('created_at', { ascending: false }),
+      ])
+      setCourses(coursesRes.data || [])
+      setNotes(notesRes.data || [])
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -73,6 +69,7 @@ export default function InstructorNotesPage() {
 
   const handleSave = async () => {
     if (!profile || !courseId || !title || !content) return
+    const supabase = createClient()
     try {
       if (editingNote) {
         await supabase
@@ -104,6 +101,7 @@ export default function InstructorNotesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('この注意点を削除しますか?')) return
+    const supabase = createClient()
     try {
       await supabase.from('instructor_notes').delete().eq('id', id)
       fetchData()

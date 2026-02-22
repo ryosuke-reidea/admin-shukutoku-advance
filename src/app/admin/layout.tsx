@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
 import { AdminSidebar } from '@/components/layout/admin-sidebar'
+import { TermProvider, TermSelector } from '@/components/term-selector'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { profile, loading, signOut } = useAuth()
@@ -28,15 +29,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen">
-      <AdminSidebar profile={profile} onSignOut={signOut} />
-      <main className="lg:pl-64">
-        <div className="pt-16 lg:pt-0">
-          <div className="p-6 lg:p-8">
-            {children}
+    <TermProvider>
+      <div className="min-h-screen">
+        <AdminSidebar profile={profile} onSignOut={signOut} />
+        <main className="lg:pl-64">
+          <div className="pt-16 lg:pt-0">
+            <div className="border-b bg-white px-6 py-3 lg:px-8">
+              <TermSelector />
+            </div>
+            <div className="p-6 lg:p-8">
+              {children}
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </TermProvider>
   )
 }

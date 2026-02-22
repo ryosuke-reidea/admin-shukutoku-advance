@@ -1,3 +1,17 @@
+export interface Term {
+  id: string
+  name: string
+  slug: string
+  start_date: string
+  end_date: string
+  enrollment_start: string | null
+  enrollment_end: string | null
+  is_active: boolean
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
 export type UserRole = 'student' | 'admin' | 'instructor' | 'tutor'
 
 export interface Profile {
@@ -41,6 +55,7 @@ export interface Course {
   price: number
   target_grade: string | null
   term: string | null
+  term_id: string | null
   status: 'draft' | 'open' | 'closed'
   display_order: number
   created_at: string
@@ -48,6 +63,7 @@ export interface Course {
   // Relations
   category?: CourseCategory
   enrollments?: Enrollment[]
+  term_info?: Term
 }
 
 export interface TimetableSlot {
@@ -72,6 +88,7 @@ export interface Enrollment {
   id: string
   student_id: string
   course_id: string
+  term_id: string | null
   status: EnrollmentStatus
   payment_method: PaymentMethod | null
   payment_status: PaymentStatus
@@ -84,6 +101,7 @@ export interface Enrollment {
   // Relations
   student?: Profile
   course?: Course
+  term_info?: Term
 }
 
 export interface ClassroomAssignment {

@@ -23,9 +23,9 @@ const STATUS_LABELS: Record<string, string> = {
 export default function TutorPrintsPage() {
   const [requests, setRequests] = useState<PrintRequestWithRelations[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   const fetchData = async () => {
+    const supabase = createClient()
     try {
       const { data } = await supabase
         .from('print_requests')
@@ -45,6 +45,7 @@ export default function TutorPrintsPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleUpdateStatus = async (id: string, status: 'printing' | 'completed') => {
+    const supabase = createClient()
     try {
       const updateData: Record<string, unknown> = { status }
       if (status === 'completed') {
@@ -94,10 +95,10 @@ export default function TutorPrintsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>タイトル</TableHead>
-                    <TableHead>講師</TableHead>
-                    <TableHead>講座</TableHead>
-                    <TableHead>部数</TableHead>
-                    <TableHead>希望日</TableHead>
+                    <TableHead className="hidden sm:table-cell">講師</TableHead>
+                    <TableHead className="hidden md:table-cell">講座</TableHead>
+                    <TableHead className="hidden sm:table-cell">部数</TableHead>
+                    <TableHead className="hidden md:table-cell">希望日</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>操作</TableHead>
                   </TableRow>
@@ -105,28 +106,34 @@ export default function TutorPrintsPage() {
                 <TableBody>
                   {pendingRequests.map((req) => (
                     <TableRow key={req.id}>
-                      <TableCell className="font-medium">{req.title}</TableCell>
-                      <TableCell>{req.instructor?.display_name || '-'}</TableCell>
-                      <TableCell>{req.course?.name || '-'}</TableCell>
-                      <TableCell>{req.copies}部</TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="font-medium text-sm">
+                        {req.title}
+                        <div className="sm:hidden text-xs text-muted-foreground mt-0.5">
+                          {req.instructor?.display_name || '-'} / {req.copies}部
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{req.instructor?.display_name || '-'}</TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">{req.course?.name || '-'}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{req.copies}部</TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">
                         {req.requested_by_date
                           ? new Date(req.requested_by_date).toLocaleDateString('ja-JP')
                           : '-'}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={req.status === 'printing' ? 'secondary' : 'outline'}>
+                        <Badge variant={req.status === 'printing' ? 'secondary' : 'outline'} className="text-xs">
                           {STATUS_LABELS[req.status] || req.status}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handlePrint(req.file_url)}
+                            className="h-7 text-xs"
                           >
-                            <Printer className="h-4 w-4 mr-1" />
+                            <Printer className="h-3 w-3 mr-1" />
                             印刷
                           </Button>
                           {req.status === 'pending' && (
@@ -134,8 +141,9 @@ export default function TutorPrintsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleUpdateStatus(req.id, 'printing')}
+                              className="h-7 text-xs"
                             >
-                              印刷中にする
+                              印刷中
                             </Button>
                           )}
                           {req.status !== 'completed' && (
@@ -143,8 +151,9 @@ export default function TutorPrintsPage() {
                               variant="default"
                               size="sm"
                               onClick={() => handleUpdateStatus(req.id, 'completed')}
+                              className="h-7 text-xs"
                             >
-                              <Check className="h-4 w-4 mr-1" />
+                              <Check className="h-3 w-3 mr-1" />
                               完了
                             </Button>
                           )}
@@ -171,19 +180,22 @@ export default function TutorPrintsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>タイトル</TableHead>
-                    <TableHead>講師</TableHead>
-                    <TableHead>講座</TableHead>
-                    <TableHead>部数</TableHead>
+                    <TableHead className="hidden sm:table-cell">講師</TableHead>
+                    <TableHead className="hidden md:table-cell">講座</TableHead>
+                    <TableHead className="hidden sm:table-cell">部数</TableHead>
                     <TableHead>完了日</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {completedRequests.map((req) => (
                     <TableRow key={req.id}>
-                      <TableCell className="font-medium">{req.title}</TableCell>
-                      <TableCell>{req.instructor?.display_name || '-'}</TableCell>
-                      <TableCell>{req.course?.name || '-'}</TableCell>
-                      <TableCell>{req.copies}部</TableCell>
+                      <TableCell className="font-medium text-sm">
+                        {req.title}
+                        <div className="sm:hidden text-xs text-muted-foreground mt-0.5">{req.instructor?.display_name || '-'} / {req.copies}部</div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{req.instructor?.display_name || '-'}</TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">{req.course?.name || '-'}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{req.copies}部</TableCell>
                       <TableCell className="text-sm">
                         {req.completed_at
                           ? new Date(req.completed_at).toLocaleDateString('ja-JP')

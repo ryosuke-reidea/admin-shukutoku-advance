@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Search } from 'lucide-react'
 import type { Enrollment, Profile, Course } from '@/lib/types/database'
+import { useTermContext } from '@/components/term-selector'
 
 interface EnrollmentWithRelations extends Enrollment {
   student: Profile
@@ -15,13 +16,14 @@ interface EnrollmentWithRelations extends Enrollment {
 }
 
 export default function TutorStudentsPage() {
+  const { selectedTermId } = useTermContext()
   const [enrollments, setEnrollments] = useState<EnrollmentWithRelations[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
+      const supabase = createClient()
       try {
         const { data } = await supabase
           .from('enrollments')
@@ -29,7 +31,12 @@ export default function TutorStudentsPage() {
           .eq('status', 'confirmed')
           .order('created_at', { ascending: false })
 
-        setEnrollments((data as unknown as EnrollmentWithRelations[]) || [])
+        // 選択中の会期でフィルタ
+        let filtered = (data as unknown as EnrollmentWithRelations[]) || []
+        if (selectedTermId) {
+          filtered = filtered.filter((e) => e.course?.term_id === selectedTermId)
+        }
+        setEnrollments(filtered)
       } catch (error) {
         console.error('Error fetching students:', error)
       } finally {
@@ -38,7 +45,7 @@ export default function TutorStudentsPage() {
     }
 
     fetchData()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTermId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredEnrollments = useMemo(() => {
     if (!searchQuery.trim()) return enrollments
@@ -86,30 +93,33 @@ export default function TutorStudentsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>生徒名</TableHead>
-                    <TableHead>メールアドレス</TableHead>
-                    <TableHead>学年</TableHead>
+                    <TableHead className="hidden md:table-cell">メールアドレス</TableHead>
+                    <TableHead className="hidden sm:table-cell">学年</TableHead>
                     <TableHead>講座名</TableHead>
-                    <TableHead>科目</TableHead>
-                    <TableHead>登録日</TableHead>
+                    <TableHead className="hidden sm:table-cell">科目</TableHead>
+                    <TableHead className="hidden md:table-cell">登録日</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredEnrollments.map((enrollment) => (
                     <TableRow key={enrollment.id}>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium text-sm">
                         {enrollment.student?.display_name || '不明'}
+                        <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-[120px]">
+                          {enrollment.student?.email || '-'}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden md:table-cell text-sm">
                         {enrollment.student?.email || '-'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         {enrollment.student?.grade ? (
-                          <Badge variant="outline">{enrollment.student.grade}年</Badge>
+                          <Badge variant="outline" className="text-xs">{enrollment.student.grade}年</Badge>
                         ) : '-'}
                       </TableCell>
-                      <TableCell>{enrollment.course?.name || '-'}</TableCell>
-                      <TableCell>{enrollment.course?.subject || '-'}</TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="text-sm">{enrollment.course?.name || '-'}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{enrollment.course?.subject || '-'}</TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">
                         {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
                       </TableCell>
                     </TableRow>

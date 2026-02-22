@@ -47,22 +47,15 @@ export default function AdminFrontContentPage() {
   const [tuitionNotes, setTuitionNotes] = useState('')
   const [tuitionDisplayOrder, setTuitionDisplayOrder] = useState(0)
 
-  const supabase = createClient()
-
   const fetchData = async () => {
+    const supabase = createClient()
     try {
-      const { data: contentData } = await supabase
-        .from('front_content')
-        .select('*')
-        .order('section')
-        .order('display_order')
-      setContents(contentData || [])
-
-      const { data: tuitionData } = await supabase
-        .from('tuition_info')
-        .select('*')
-        .order('display_order')
-      setTuitionInfos(tuitionData || [])
+      const [contentRes, tuitionRes] = await Promise.all([
+        supabase.from('front_content').select('*').order('section').order('display_order'),
+        supabase.from('tuition_info').select('*').order('display_order'),
+      ])
+      setContents(contentRes.data || [])
+      setTuitionInfos(tuitionRes.data || [])
     } catch (error) {
       console.error('Error fetching front content:', error)
     } finally {
@@ -117,6 +110,7 @@ export default function AdminFrontContentPage() {
   }
 
   const handleSaveContent = async () => {
+    const supabase = createClient()
     try {
       if (editingContent) {
         await supabase
@@ -153,6 +147,7 @@ export default function AdminFrontContentPage() {
 
   const handleDeleteContent = async (id: string) => {
     if (!confirm('このコンテンツを削除しますか?')) return
+    const supabase = createClient()
     try {
       await supabase.from('front_content').delete().eq('id', id)
       fetchData()
@@ -162,6 +157,7 @@ export default function AdminFrontContentPage() {
   }
 
   const handleToggleActive = async (item: FrontContent) => {
+    const supabase = createClient()
     try {
       await supabase
         .from('front_content')
@@ -174,6 +170,7 @@ export default function AdminFrontContentPage() {
   }
 
   const handleSaveTuition = async () => {
+    const supabase = createClient()
     try {
       if (editingTuition) {
         await supabase
@@ -209,6 +206,7 @@ export default function AdminFrontContentPage() {
 
   const handleDeleteTuition = async (id: string) => {
     if (!confirm('この料金情報を削除しますか?')) return
+    const supabase = createClient()
     try {
       await supabase.from('tuition_info').delete().eq('id', id)
       fetchData()

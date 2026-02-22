@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useAuth } from '@/hooks/use-auth'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,7 +21,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function InstructorPrintRequestsPage() {
-  const { supabase, profile } = useAuth()
+  const { profile } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [requests, setRequests] = useState<(PrintRequest & { course?: Course })[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,19 +39,14 @@ export default function InstructorPrintRequestsPage() {
 
   const fetchData = async () => {
     if (!profile) return
+    const supabase = createClient()
     try {
-      const { data: coursesData } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('instructor_id', profile.id)
-      setCourses(coursesData || [])
-
-      const { data: requestsData } = await supabase
-        .from('print_requests')
-        .select('*, course:courses(*)')
-        .eq('instructor_id', profile.id)
-        .order('created_at', { ascending: false })
-      setRequests(requestsData || [])
+      const [coursesRes, requestsRes] = await Promise.all([
+        supabase.from('courses').select('*').eq('instructor_id', profile.id),
+        supabase.from('print_requests').select('*, course:courses(*)').eq('instructor_id', profile.id).order('created_at', { ascending: false }),
+      ])
+      setCourses(coursesRes.data || [])
+      setRequests(requestsRes.data || [])
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -77,6 +73,7 @@ export default function InstructorPrintRequestsPage() {
     if (!profile || !title || !selectedFile) return
     setSubmitting(true)
 
+    const supabase = createClient()
     try {
       // Upload file to Supabase Storage
       const fileExt = selectedFile.name.split('.').pop()
@@ -169,15 +166,16 @@ export default function InstructorPrintRequestsPage() {
             </div>
             <div className="space-y-2">
               <Label>ファイル</Label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <Input
                   ref={fileInputRef}
                   type="file"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png"
+                  className="text-sm"
                 />
                 {selectedFile && (
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="text-xs w-fit">
                     <Upload className="h-3 w-3 mr-1" />
                     {selectedFile.name}
                   </Badge>
@@ -218,41 +216,44 @@ export default function InstructorPrintRequestsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>タイトル</TableHead>
-                    <TableHead>講座</TableHead>
-                    <TableHead>ファイル</TableHead>
-                    <TableHead>部数</TableHead>
-                    <TableHead>希望日</TableHead>
+                    <TableHead className="hidden md:table-cell">講座</TableHead>
+                    <TableHead className="hidden sm:table-cell">ファイル</TableHead>
+                    <TableHead className="hidden sm:table-cell">部数</TableHead>
+                    <TableHead className="hidden md:table-cell">希望日</TableHead>
                     <TableHead>ステータス</TableHead>
-                    <TableHead>依頼日</TableHead>
+                    <TableHead className="hidden sm:table-cell">依頼日</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {requests.map((req) => (
                     <TableRow key={req.id}>
-                      <TableCell className="font-medium">{req.title}</TableCell>
-                      <TableCell>{req.course?.name || '-'}</TableCell>
-                      <TableCell>
+                      <TableCell className="font-medium text-sm">
+                        {req.title}
+                        <div className="sm:hidden text-xs text-muted-foreground mt-0.5">{req.copies}部</div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">{req.course?.name || '-'}</TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <a
                           href={req.file_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary hover:underline text-sm"
+                          className="text-primary hover:underline text-xs sm:text-sm truncate block max-w-[120px]"
                         >
                           {req.file_name}
                         </a>
                       </TableCell>
-                      <TableCell>{req.copies}部</TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden sm:table-cell text-sm">{req.copies}部</TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">
                         {req.requested_by_date
                           ? new Date(req.requested_by_date).toLocaleDateString('ja-JP')
                           : '-'}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={req.status === 'completed' ? 'default' : req.status === 'printing' ? 'secondary' : 'outline'}>
+                        <Badge variant={req.status === 'completed' ? 'default' : req.status === 'printing' ? 'secondary' : 'outline'} className="text-xs">
                           {STATUS_LABELS[req.status] || req.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden sm:table-cell text-sm">
                         {new Date(req.created_at).toLocaleDateString('ja-JP')}
                       </TableCell>
                     </TableRow>

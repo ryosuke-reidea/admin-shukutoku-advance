@@ -1,35 +1,60 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Search } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Search, Eye } from 'lucide-react'
 import { ENROLLMENT_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
 import type { Enrollment, Profile, Course, CourseCategory } from '@/lib/types/database'
+import { useTermContext } from '@/components/term-selector'
 
 interface EnrollmentWithRelations extends Enrollment {
   student: Profile
   course: Course & { category: CourseCategory }
 }
 
+const CATEGORY_TABS = [
+  { value: 'all', label: '全体' },
+  { value: 'general', label: '一般' },
+  { value: 'recommendation', label: '推薦' },
+  { value: 'ryugata', label: '留型' },
+  { value: 'junior', label: '中学' },
+]
+
 export default function AdminStudentsPage() {
+  const { selectedTermId } = useTermContext()
   const [enrollments, setEnrollments] = useState<EnrollmentWithRelations[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeTab, setActiveTab] = useState('all')
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
+      const supabase = createClient()
       try {
-        const { data } = await supabase
+        let query = supabase
           .from('enrollments')
           .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!enrollments_course_id_fkey(*, category:course_categories(*))')
           .order('created_at', { ascending: false })
 
-        setEnrollments((data as unknown as EnrollmentWithRelations[]) || [])
+        // 選択中の会期でフィルタ
+        if (selectedTermId) {
+          query = query.eq('course.term_id', selectedTermId)
+        }
+
+        const { data } = await query
+
+        // course.term_id フィルタはPostgREST embedded filterのため、nullになったcourseを除外
+        const filtered = ((data as unknown as EnrollmentWithRelations[]) || []).filter(
+          (e) => e.course !== null
+        )
+        setEnrollments(filtered)
       } catch (error) {
         console.error('Error fetching students:', error)
       } finally {
@@ -38,24 +63,46 @@ export default function AdminStudentsPage() {
     }
 
     fetchData()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTermId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredEnrollments = useMemo(() => {
-    if (!searchQuery.trim()) return enrollments
-    const query = searchQuery.toLowerCase()
-    return enrollments.filter((e) => {
-      const studentName = e.student?.display_name?.toLowerCase() || ''
-      const studentEmail = e.student?.email?.toLowerCase() || ''
-      const courseName = e.course?.name?.toLowerCase() || ''
-      const categoryName = e.course?.category?.name?.toLowerCase() || ''
-      return (
-        studentName.includes(query) ||
-        studentEmail.includes(query) ||
-        courseName.includes(query) ||
-        categoryName.includes(query)
-      )
+    let filtered = enrollments
+
+    // Category filter
+    if (activeTab !== 'all') {
+      filtered = filtered.filter((e) => e.course?.category?.slug === activeTab)
+    }
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter((e) => {
+        const studentName = e.student?.display_name?.toLowerCase() || ''
+        const studentEmail = e.student?.email?.toLowerCase() || ''
+        const courseName = e.course?.name?.toLowerCase() || ''
+        const categoryName = e.course?.category?.name?.toLowerCase() || ''
+        return (
+          studentName.includes(query) ||
+          studentEmail.includes(query) ||
+          courseName.includes(query) ||
+          categoryName.includes(query)
+        )
+      })
+    }
+
+    return filtered
+  }, [enrollments, searchQuery, activeTab])
+
+  // Calculate counts per category
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: enrollments.length }
+    CATEGORY_TABS.forEach((tab) => {
+      if (tab.value !== 'all') {
+        counts[tab.value] = enrollments.filter((e) => e.course?.category?.slug === tab.value).length
+      }
     })
-  }, [enrollments, searchQuery])
+    return counts
+  }, [enrollments])
 
   if (loading) {
     return (
@@ -68,9 +115,6 @@ export default function AdminStudentsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">申し込み生徒一覧</h1>
-      <p className="text-sm text-muted-foreground">
-        一般・推薦・留型・中学 一括表示
-      </p>
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -83,65 +127,100 @@ export default function AdminStudentsPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            全申込一覧 ({filteredEnrollments.length}件)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredEnrollments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">データがありません。</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>生徒名</TableHead>
-                    <TableHead>メールアドレス</TableHead>
-                    <TableHead>講座名</TableHead>
-                    <TableHead>カテゴリ</TableHead>
-                    <TableHead>ステータス</TableHead>
-                    <TableHead>支払い状況</TableHead>
-                    <TableHead>申込日</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEnrollments.map((enrollment) => (
-                    <TableRow key={enrollment.id}>
-                      <TableCell className="font-medium">
-                        {enrollment.student?.display_name || '不明'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {enrollment.student?.email || '-'}
-                      </TableCell>
-                      <TableCell>{enrollment.course?.name || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {enrollment.course?.category?.name || '-'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {ENROLLMENT_STATUSES[enrollment.status as keyof typeof ENROLLMENT_STATUSES] || enrollment.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'}>
-                          {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Category Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex-wrap h-auto">
+          {CATEGORY_TABS.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} className="text-xs sm:text-sm">
+              {tab.label}
+              <Badge variant="secondary" className="ml-1 sm:ml-2 text-[10px] sm:text-xs px-1 sm:px-1.5 py-0">
+                {categoryCounts[tab.value] || 0}
+              </Badge>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {CATEGORY_TABS.map((tab) => (
+          <TabsContent key={tab.value} value={tab.value}>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {tab.label === '全体' ? '全申込一覧' : `${tab.label} 申込一覧`} ({filteredEnrollments.length}件)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {filteredEnrollments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">データがありません。</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>生徒名</TableHead>
+                          <TableHead className="hidden md:table-cell">メールアドレス</TableHead>
+                          <TableHead>講座名</TableHead>
+                          <TableHead className="hidden sm:table-cell">カテゴリ</TableHead>
+                          <TableHead className="hidden lg:table-cell">ステータス</TableHead>
+                          <TableHead>支払い</TableHead>
+                          <TableHead className="hidden sm:table-cell">申込日</TableHead>
+                          <TableHead>操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredEnrollments.map((enrollment) => (
+                          <TableRow key={enrollment.id}>
+                            <TableCell className="font-medium">
+                              <Link
+                                href={`/admin/students/${enrollment.student_id}`}
+                                className="text-primary hover:underline text-sm"
+                              >
+                                {enrollment.student?.display_name || '不明'}
+                              </Link>
+                              <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-[120px]">
+                                {enrollment.student?.email || '-'}
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell text-sm">
+                              {enrollment.student?.email || '-'}
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[120px] sm:max-w-none truncate">{enrollment.course?.name || '-'}</TableCell>
+                            <TableCell className="hidden sm:table-cell">
+                              <Badge variant="outline" className="text-xs">
+                                {enrollment.course?.category?.name || '-'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell">
+                              <Badge variant="outline" className="text-xs">
+                                {ENROLLMENT_STATUSES[enrollment.status as keyof typeof ENROLLMENT_STATUSES] || enrollment.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'} className="text-xs">
+                                {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell text-sm">
+                              {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
+                            </TableCell>
+                            <TableCell>
+                              <Link href={`/admin/students/${enrollment.student_id}`}>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 sm:h-auto sm:w-auto sm:px-3">
+                                  <Eye className="h-4 w-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">詳細</span>
+                                </Button>
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   )
 }

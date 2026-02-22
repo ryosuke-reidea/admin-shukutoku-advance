@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/use-auth'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BookOpen, StickyNote } from 'lucide-react'
 import type { Course, InstructorNote } from '@/lib/types/database'
+import { formatTime } from '@/lib/utils'
 
 export default function InstructorDashboard() {
-  const { supabase, profile } = useAuth()
+  const { profile } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [recentNotes, setRecentNotes] = useState<InstructorNote[]>([])
   const [loading, setLoading] = useState(true)
@@ -17,23 +19,14 @@ export default function InstructorDashboard() {
     if (!profile) return
 
     const fetchData = async () => {
+      const supabase = createClient()
       try {
-        // Fetch instructor's courses
-        const { data: coursesData } = await supabase
-          .from('courses')
-          .select('*')
-          .eq('instructor_id', profile.id)
-          .order('created_at', { ascending: false })
-        setCourses(coursesData || [])
-
-        // Fetch recent notes
-        const { data: notesData } = await supabase
-          .from('instructor_notes')
-          .select('*')
-          .eq('instructor_id', profile.id)
-          .order('created_at', { ascending: false })
-          .limit(5)
-        setRecentNotes(notesData || [])
+        const [coursesRes, notesRes] = await Promise.all([
+          supabase.from('courses').select('*').eq('instructor_id', profile.id).order('created_at', { ascending: false }),
+          supabase.from('instructor_notes').select('*').eq('instructor_id', profile.id).order('created_at', { ascending: false }).limit(5),
+        ])
+        setCourses(coursesRes.data || [])
+        setRecentNotes(notesRes.data || [])
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -92,7 +85,7 @@ export default function InstructorDashboard() {
                   <div>
                     <p className="font-medium">{course.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {course.subject} / {course.day_of_week ? `${course.day_of_week}曜日` : '-'} {course.start_time || ''}~{course.end_time || ''}
+                      {course.subject} / {course.day_of_week ? `${course.day_of_week}曜日` : '-'} {formatTime(course.start_time)}~{formatTime(course.end_time)}
                     </p>
                   </div>
                   <Badge variant="outline">{course.classroom || '-'}</Badge>

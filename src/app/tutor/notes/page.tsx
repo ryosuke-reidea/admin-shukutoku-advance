@@ -15,10 +15,10 @@ interface NoteWithRelations extends InstructorNote {
 export default function TutorNotesPage() {
   const [notes, setNotes] = useState<NoteWithRelations[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
+      const supabase = createClient()
       try {
         const { data } = await supabase
           .from('instructor_notes')

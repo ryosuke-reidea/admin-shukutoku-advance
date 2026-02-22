@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
@@ -11,34 +11,66 @@ export function useAuth() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
-  const supabase = createClient()
+  const isMounted = useRef(true)
 
   useEffect(() => {
+    isMounted.current = true
+    const supabase = createClient()
+
     const getUser = async () => {
       try {
-        const { data: { user: authUser } } = await supabase.auth.getUser()
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+
+        if (!isMounted.current) return
+
+        if (authError || !authUser) {
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+
         setUser(authUser)
 
-        if (authUser) {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', authUser.id)
-            .single()
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .single()
+
+        if (!isMounted.current) return
+
+        if (profileError) {
+          console.error('Profile fetch error:', profileError)
+          setProfile(null)
+        } else {
           setProfile(profileData)
         }
-      } catch {
-        setUser(null)
-        setProfile(null)
+      } catch (err) {
+        console.error('Auth error:', err)
+        if (isMounted.current) {
+          setUser(null)
+          setProfile(null)
+        }
       } finally {
-        setLoading(false)
+        if (isMounted.current) {
+          setLoading(false)
+        }
       }
     }
 
     getUser()
 
+    // Safety timeout - if loading takes more than 8s, force complete
+    const timeout = setTimeout(() => {
+      if (isMounted.current) {
+        setLoading(false)
+      }
+    }, 8000)
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (_event: string, session: { user: User } | null) => {
+        if (!isMounted.current) return
         setUser(session?.user ?? null)
         if (session?.user) {
           const { data: profileData } = await supabase
@@ -46,24 +78,27 @@ export function useAuth() {
             .select('*')
             .eq('id', session.user.id)
             .single()
-          setProfile(profileData)
+          if (isMounted.current) setProfile(profileData)
         } else {
-          setProfile(null)
+          if (isMounted.current) setProfile(null)
         }
       }
     )
 
     return () => {
+      isMounted.current = false
+      clearTimeout(timeout)
       subscription.unsubscribe()
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
+    const supabase = createClient()
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
     router.push('/login')
-  }
+  }, [router])
 
-  return { user, profile, loading, signOut, supabase }
+  return { user, profile, loading, signOut }
 }

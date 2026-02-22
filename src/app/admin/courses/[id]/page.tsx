@@ -117,12 +117,12 @@ export default function CourseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => router.back()}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+        <Button variant="ghost" onClick={() => router.back()} size="sm">
           <ArrowLeft className="h-4 w-4 mr-2" />
           戻る
         </Button>
-        <h1 className="text-2xl font-bold">{course.name}</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">{course.name}</h1>
       </div>
 
       {/* Course Info */}
@@ -224,38 +224,41 @@ export default function CourseDetailPage() {
           {enrollments.length === 0 ? (
             <p className="text-sm text-muted-foreground">まだ申込はありません。</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>生徒名</TableHead>
-                  <TableHead>メールアドレス</TableHead>
-                  <TableHead>ステータス</TableHead>
-                  <TableHead>支払い状況</TableHead>
-                  <TableHead>申込日</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {enrollments.map((enrollment) => (
-                  <TableRow key={enrollment.id}>
-                    <TableCell className="font-medium">
-                      {enrollment.student?.display_name || '不明'}
-                    </TableCell>
-                    <TableCell>{enrollment.student?.email || '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{enrollment.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'}>
-                        {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>生徒名</TableHead>
+                    <TableHead className="hidden sm:table-cell">メールアドレス</TableHead>
+                    <TableHead>ステータス</TableHead>
+                    <TableHead>支払い状況</TableHead>
+                    <TableHead className="hidden sm:table-cell">申込日</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {enrollments.map((enrollment) => (
+                    <TableRow key={enrollment.id}>
+                      <TableCell className="font-medium text-sm">
+                        {enrollment.student?.display_name || '不明'}
+                        <div className="sm:hidden text-xs text-muted-foreground mt-0.5">{enrollment.student?.email || '-'}</div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{enrollment.student?.email || '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{enrollment.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'} className="text-xs">
+                          {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">
+                        {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

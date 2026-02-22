@@ -27,9 +27,9 @@ export default function AdminContactsPage() {
   const [contacts, setContacts] = useState<ContactSubmission[]>([])
   const [selectedContact, setSelectedContact] = useState<ContactSubmission | null>(null)
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   const fetchData = async () => {
+    const supabase = createClient()
     try {
       const { data } = await supabase
         .from('contact_submissions')
@@ -48,6 +48,7 @@ export default function AdminContactsPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMarkAsRead = async (contact: ContactSubmission) => {
+    const supabase = createClient()
     try {
       await supabase
         .from('contact_submissions')
@@ -60,6 +61,7 @@ export default function AdminContactsPage() {
   }
 
   const handleMarkAsReplied = async (contact: ContactSubmission) => {
+    const supabase = createClient()
     try {
       await supabase
         .from('contact_submissions')
@@ -116,11 +118,11 @@ export default function AdminContactsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>名前</TableHead>
-                    <TableHead>メール</TableHead>
-                    <TableHead>件名</TableHead>
-                    <TableHead>カテゴリ</TableHead>
+                    <TableHead className="hidden md:table-cell">メール</TableHead>
+                    <TableHead className="hidden sm:table-cell">件名</TableHead>
+                    <TableHead className="hidden lg:table-cell">カテゴリ</TableHead>
                     <TableHead>ステータス</TableHead>
-                    <TableHead>受信日</TableHead>
+                    <TableHead className="hidden sm:table-cell">受信日</TableHead>
                     <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -130,18 +132,21 @@ export default function AdminContactsPage() {
                       key={contact.id}
                       className={contact.status === 'unread' ? 'bg-muted/50 font-medium' : ''}
                     >
-                      <TableCell className="font-medium">{contact.name}</TableCell>
-                      <TableCell className="text-sm">{contact.email}</TableCell>
-                      <TableCell>{contact.subject}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{contact.category}</Badge>
+                      <TableCell className="font-medium text-sm">
+                        {contact.name}
+                        <div className="sm:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-[150px]">{contact.subject}</div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">{contact.email}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{contact.subject}</TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <Badge variant="outline" className="text-xs">{contact.category}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={STATUS_VARIANTS[contact.status] || 'secondary'}>
+                        <Badge variant={STATUS_VARIANTS[contact.status] || 'secondary'} className="text-xs">
                           {STATUS_LABELS[contact.status] || contact.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden sm:table-cell text-sm">
                         {new Date(contact.created_at).toLocaleDateString('ja-JP')}
                       </TableCell>
                       <TableCell>
@@ -149,9 +154,10 @@ export default function AdminContactsPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenContact(contact)}
+                          className="h-8 w-8 p-0 sm:h-auto sm:w-auto sm:px-3"
                         >
-                          <Eye className="h-4 w-4 mr-1" />
-                          詳細
+                          <Eye className="h-4 w-4 sm:mr-1" />
+                          <span className="hidden sm:inline">詳細</span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -165,13 +171,13 @@ export default function AdminContactsPage() {
 
       {/* Contact Detail Dialog */}
       <Dialog open={!!selectedContact} onOpenChange={(open) => { if (!open) setSelectedContact(null) }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>お問い合わせ詳細</DialogTitle>
           </DialogHeader>
           {selectedContact && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">名前</p>
                   <p className="font-medium">{selectedContact.name}</p>

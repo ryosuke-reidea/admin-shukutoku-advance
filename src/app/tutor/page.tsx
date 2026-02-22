@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/hooks/use-auth'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Clock, Users, StickyNote, Printer } from 'lucide-react'
 
 export default function TutorDashboard() {
-  const { supabase } = useAuth()
   const [timetableCount, setTimetableCount] = useState(0)
   const [studentCount, setStudentCount] = useState(0)
   const [noteCount, setNoteCount] = useState(0)
@@ -15,29 +14,19 @@ export default function TutorDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      const supabase = createClient()
       try {
-        const { count: timetable } = await supabase
-          .from('timetable_slots')
-          .select('*', { count: 'exact', head: true })
-        setTimetableCount(timetable || 0)
+        const [timetableRes, studentsRes, notesRes, printsRes] = await Promise.all([
+          supabase.from('timetable_slots').select('*', { count: 'exact', head: true }),
+          supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
+          supabase.from('instructor_notes').select('*', { count: 'exact', head: true }).in('target_audience', ['tutor', 'both']),
+          supabase.from('print_requests').select('*', { count: 'exact', head: true }).in('status', ['pending', 'printing']),
+        ])
 
-        const { count: students } = await supabase
-          .from('enrollments')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'confirmed')
-        setStudentCount(students || 0)
-
-        const { count: notes } = await supabase
-          .from('instructor_notes')
-          .select('*', { count: 'exact', head: true })
-          .in('target_audience', ['tutor', 'both'])
-        setNoteCount(notes || 0)
-
-        const { count: prints } = await supabase
-          .from('print_requests')
-          .select('*', { count: 'exact', head: true })
-          .in('status', ['pending', 'printing'])
-        setPrintCount(prints || 0)
+        setTimetableCount(timetableRes.count || 0)
+        setStudentCount(studentsRes.count || 0)
+        setNoteCount(notesRes.count || 0)
+        setPrintCount(printsRes.count || 0)
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -46,7 +35,7 @@ export default function TutorDashboard() {
     }
 
     fetchData()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   if (loading) {
     return (
