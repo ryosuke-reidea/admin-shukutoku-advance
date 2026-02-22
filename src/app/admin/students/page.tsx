@@ -28,7 +28,7 @@ const CATEGORY_TABS = [
 ]
 
 export default function AdminStudentsPage() {
-  const { selectedTermId } = useTermContext()
+  const { selectedTermId, loading: termLoading } = useTermContext()
   const [enrollments, setEnrollments] = useState<EnrollmentWithRelations[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('all')
@@ -36,25 +36,18 @@ export default function AdminStudentsPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!selectedTermId) return
+      setLoading(true)
       const supabase = createClient()
       try {
-        let query = supabase
+        // enrollmentsテーブル自体のterm_idで直接フィルタ（embedded filterの問題を回避）
+        const { data } = await supabase
           .from('enrollments')
           .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!enrollments_course_id_fkey(*, category:course_categories(*))')
+          .eq('term_id', selectedTermId)
           .order('created_at', { ascending: false })
 
-        // 選択中の会期でフィルタ
-        if (selectedTermId) {
-          query = query.eq('course.term_id', selectedTermId)
-        }
-
-        const { data } = await query
-
-        // course.term_id フィルタはPostgREST embedded filterのため、nullになったcourseを除外
-        const filtered = ((data as unknown as EnrollmentWithRelations[]) || []).filter(
-          (e) => e.course !== null
-        )
-        setEnrollments(filtered)
+        setEnrollments((data as unknown as EnrollmentWithRelations[]) || [])
       } catch (error) {
         console.error('Error fetching students:', error)
       } finally {
@@ -62,8 +55,10 @@ export default function AdminStudentsPage() {
       }
     }
 
-    fetchData()
-  }, [selectedTermId]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!termLoading && selectedTermId) {
+      fetchData()
+    }
+  }, [termLoading, selectedTermId])
 
   const filteredEnrollments = useMemo(() => {
     let filtered = enrollments
@@ -104,10 +99,13 @@ export default function AdminStudentsPage() {
     return counts
   }, [enrollments])
 
-  if (loading) {
+  if (termLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">読み込み中...</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">読み込み中...</p>
+        </div>
       </div>
     )
   }

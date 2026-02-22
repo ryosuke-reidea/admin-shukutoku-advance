@@ -68,7 +68,7 @@ interface CategoryInfo {
 // メインコンポーネント
 // ============================================================
 export default function AdminSignagePage() {
-  const { selectedTermId } = useTermContext()
+  const { selectedTermId, loading: termLoading } = useTermContext()
   const [slots, setSlots] = useState<TimetableSlot[]>([])
   const [categories, setCategories] = useState<CategoryInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -76,6 +76,8 @@ export default function AdminSignagePage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!selectedTermId) return
+      setLoading(true)
       const supabase = createClient()
       try {
         const [slotsRes, catRes] = await Promise.all([
@@ -110,8 +112,10 @@ export default function AdminSignagePage() {
       }
     }
 
-    fetchData()
-  }, [selectedTermId]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!termLoading && selectedTermId) {
+      fetchData()
+    }
+  }, [termLoading, selectedTermId])
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -152,10 +156,13 @@ export default function AdminSignagePage() {
   const now = new Date()
   const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`
 
-  if (loading) {
+  if (termLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">読み込み中...</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">読み込み中...</p>
+        </div>
       </div>
     )
   }
