@@ -6,6 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types/database'
 
+// プロフィールキャッシュ（同じセッション内で重複取得を防ぐ）
+let profileCache: { userId: string; data: Profile } | null = null
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -17,70 +20,87 @@ export function useAuth() {
     isMounted.current = true
     const supabase = createClient()
 
-    const getUser = async () => {
+    const fetchProfile = async (userId: string) => {
+      // キャッシュがあればそれを使う
+      if (profileCache && profileCache.userId === userId) {
+        return profileCache.data
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) {
+        console.error('Profile fetch error:', error.message)
+        return null
+      }
+
+      if (data) {
+        profileCache = { userId, data }
+      }
+      return data
+    }
+
+    const initAuth = async () => {
       try {
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+        // getSession はローカルキャッシュを使うので高速（getUser はAPIコール）
+        const { data: { session } } = await supabase.auth.getSession()
 
         if (!isMounted.current) return
 
-        if (authError || !authUser) {
+        if (!session?.user) {
           setUser(null)
           setProfile(null)
           setLoading(false)
           return
         }
 
-        setUser(authUser)
+        setUser(session.user)
 
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authUser.id)
-          .single()
-
-        if (!isMounted.current) return
-
-        if (profileError) {
-          console.error('Profile fetch error:', profileError)
-          setProfile(null)
-        } else {
+        const profileData = await fetchProfile(session.user.id)
+        if (isMounted.current) {
           setProfile(profileData)
+          setLoading(false)
         }
       } catch (err) {
-        console.error('Auth error:', err)
+        console.error('Auth init error:', err)
         if (isMounted.current) {
           setUser(null)
           setProfile(null)
-        }
-      } finally {
-        if (isMounted.current) {
           setLoading(false)
         }
       }
     }
 
-    getUser()
+    initAuth()
 
-    // Safety timeout - if loading takes more than 8s, force complete
+    // Safety timeout - 5秒に短縮
     const timeout = setTimeout(() => {
       if (isMounted.current) {
         setLoading(false)
       }
-    }, 8000)
+    }, 5000)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event: string, session: { user: User } | null) => {
+      async (event: string, session: { user: User } | null) => {
         if (!isMounted.current) return
-        setUser(session?.user ?? null)
+
+        if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setProfile(null)
+          profileCache = null
+          return
+        }
+
         if (session?.user) {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
+          setUser(session.user)
+          if (event === 'SIGNED_IN') {
+            profileCache = null // 新規ログイン時はキャッシュクリア
+          }
+          const profileData = await fetchProfile(session.user.id)
           if (isMounted.current) setProfile(profileData)
-        } else {
-          if (isMounted.current) setProfile(null)
         }
       }
     )
@@ -94,6 +114,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     const supabase = createClient()
+    profileCache = null
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)

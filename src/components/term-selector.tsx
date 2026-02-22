@@ -37,19 +37,28 @@ export function TermProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const fetchTerms = async () => {
-      const supabase = createClient()
-      const { data } = await supabase
-        .from('terms')
-        .select('*')
-        .order('display_order', { ascending: false })
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from('terms')
+          .select('*')
+          .order('display_order', { ascending: false })
 
-      if (data) {
-        setTerms(data)
-        // デフォルトで is_active な会期を選択
-        const active = data.find((t: Term) => t.is_active)
-        setSelectedTermId(active?.id ?? data[0]?.id ?? null)
+        if (error) {
+          console.warn('Terms table not available:', error.message)
+          return
+        }
+
+        if (data && data.length > 0) {
+          setTerms(data)
+          const active = data.find((t: Term) => t.is_active)
+          setSelectedTermId(active?.id ?? data[0]?.id ?? null)
+        }
+      } catch (err) {
+        console.warn('Terms fetch failed:', err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     fetchTerms()
   }, [])

@@ -16,66 +16,67 @@ export default function LoginPage() {
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
-    const supabase = createClient()
     e.preventDefault()
     setError(null)
     setLoading(true)
 
-    try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+    const supabase = createClient()
 
-      if (signInError) {
-        setError('メールアドレスまたはパスワードが正しくありません。')
-        setLoading(false)
-        return
-      }
+    // Step 1: サインイン
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setError('認証に失敗しました。')
-        setLoading(false)
-        return
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (!profile) {
-        setError('プロフィールが見つかりません。')
-        setLoading(false)
-        return
-      }
-
-      // Only allow admin, instructor, tutor roles
-      if (!['admin', 'instructor', 'tutor'].includes(profile.role)) {
-        await supabase.auth.signOut()
-        setError('管理画面へのアクセス権限がありません。')
-        setLoading(false)
-        return
-      }
-
-      switch (profile.role) {
-        case 'admin':
-          router.push('/admin')
-          break
-        case 'instructor':
-          router.push('/instructor')
-          break
-        case 'tutor':
-          router.push('/tutor')
-          break
-        default:
-          router.push('/login')
-      }
-    } catch {
-      setError('ログイン中にエラーが発生しました。')
+    if (signInError) {
+      console.error('Sign in error:', signInError.message)
+      setError('メールアドレスまたはパスワードが正しくありません。')
       setLoading(false)
+      return
+    }
+
+    const user = signInData?.user
+    if (!user) {
+      setError('認証に失敗しました。')
+      setLoading(false)
+      return
+    }
+
+    // Step 2: プロフィール取得
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError || !profile) {
+      console.error('Profile error:', profileError?.message)
+      setError('プロフィールの取得に失敗しました。管理者にお問い合わせください。')
+      setLoading(false)
+      return
+    }
+
+    // Only allow admin, instructor, tutor roles
+    if (!['admin', 'instructor', 'tutor'].includes(profile.role)) {
+      await supabase.auth.signOut()
+      setError('管理画面へのアクセス権限がありません。')
+      setLoading(false)
+      return
+    }
+
+    // Step 3: ロールに応じてリダイレクト
+    switch (profile.role) {
+      case 'admin':
+        router.push('/admin')
+        break
+      case 'instructor':
+        router.push('/instructor')
+        break
+      case 'tutor':
+        router.push('/tutor')
+        break
+      default:
+        router.push('/login')
     }
   }
 
