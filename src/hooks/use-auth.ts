@@ -45,21 +45,20 @@ export function useAuth() {
 
     const initAuth = async () => {
       try {
-        // getSession はローカルキャッシュを使うので高速（getUser はAPIコール）
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
 
         if (!isMounted.current) return
 
-        if (!session?.user) {
+        if (authError || !authUser) {
           setUser(null)
           setProfile(null)
           setLoading(false)
           return
         }
 
-        setUser(session.user)
+        setUser(authUser)
 
-        const profileData = await fetchProfile(session.user.id)
+        const profileData = await fetchProfile(authUser.id)
         if (isMounted.current) {
           setProfile(profileData)
           setLoading(false)
