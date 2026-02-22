@@ -44,23 +44,47 @@ export default function LoginPage() {
       }
 
       // Step 2: プロフィール取得
-      const { data: profile, error: profileError } = await supabase
+      let { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .single()
 
-      if (profileError) {
-        console.error('Profile error:', profileError.message, profileError)
-        setError(`プロフィール取得エラー: ${profileError.message}`)
-        setLoading(false)
-        return
-      }
+      // プロフィールが見つからない場合、自動作成を試みる
+      if (profileError || !profile) {
+        console.warn('Profile not found, attempting auto-create for:', user.email)
 
-      if (!profile) {
-        setError('プロフィールが見つかりません。管理者にお問い合わせください。')
-        setLoading(false)
-        return
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email || email,
+            role: 'admin', // 管理画面からのログインなのでデフォルトadmin（後で変更可能）
+            display_name: user.email?.split('@')[0] || 'ユーザー',
+          })
+
+        if (insertError) {
+          console.error('Profile auto-create error:', insertError.message, insertError)
+          setError(`プロフィール作成エラー: ${insertError.message}。管理者にお問い合わせください。`)
+          setLoading(false)
+          return
+        }
+
+        // 再取得
+        const { data: newProfile, error: newProfileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (newProfileError || !newProfile) {
+          console.error('Profile re-fetch error:', newProfileError?.message)
+          setError('プロフィールの作成に失敗しました。管理者にお問い合わせください。')
+          setLoading(false)
+          return
+        }
+
+        profile = newProfile
       }
 
       // Only allow admin, instructor, tutor roles

@@ -20,7 +20,7 @@ export function useAuth() {
     isMounted.current = true
     const supabase = createClient()
 
-    const fetchProfile = async (userId: string) => {
+    const fetchProfile = async (userId: string, userEmail?: string) => {
       // キャッシュがあればそれを使う
       if (profileCache && profileCache.userId === userId) {
         return profileCache.data
@@ -32,8 +32,36 @@ export function useAuth() {
         .eq('id', userId)
         .single()
 
-      if (error) {
-        console.error('Profile fetch error:', error.message)
+      if (error || !data) {
+        // プロフィールが見つからない場合、自動作成を試みる
+        if (userEmail) {
+          console.warn('Profile not found in useAuth, attempting auto-create:', userEmail)
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: userId,
+              email: userEmail,
+              role: 'student',
+              display_name: userEmail.split('@')[0] || 'ユーザー',
+            })
+
+          if (!insertError) {
+            // 再取得
+            const { data: newData } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .single()
+
+            if (newData) {
+              profileCache = { userId, data: newData }
+              return newData
+            }
+          } else {
+            console.error('Profile auto-create error:', insertError.message)
+          }
+        }
+        if (error) console.error('Profile fetch error:', error.message)
         return null
       }
 
@@ -58,7 +86,7 @@ export function useAuth() {
 
         setUser(authUser)
 
-        const profileData = await fetchProfile(authUser.id)
+        const profileData = await fetchProfile(authUser.id, authUser.email)
         if (isMounted.current) {
           setProfile(profileData)
           setLoading(false)
@@ -98,7 +126,7 @@ export function useAuth() {
           if (event === 'SIGNED_IN') {
             profileCache = null // 新規ログイン時はキャッシュクリア
           }
-          const profileData = await fetchProfile(session.user.id)
+          const profileData = await fetchProfile(session.user.id, session.user.email)
           if (isMounted.current) setProfile(profileData)
         }
       }
