@@ -16,6 +16,7 @@ interface TermContextValue {
   selectedTermId: string | null
   setSelectedTermId: (id: string) => void
   loading: boolean
+  refreshTerms: () => Promise<void>
 }
 
 const TermContext = createContext<TermContextValue>({
@@ -24,6 +25,7 @@ const TermContext = createContext<TermContextValue>({
   selectedTermId: null,
   setSelectedTermId: () => {},
   loading: true,
+  refreshTerms: async () => {},
 })
 
 export function useTermContext() {
@@ -35,38 +37,43 @@ export function TermProvider({ children }: { children: React.ReactNode }) {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchTerms = async () => {
-      try {
-        const supabase = createClient()
-        const { data, error } = await supabase
-          .from('terms')
-          .select('*')
-          .order('display_order', { ascending: false })
+  const fetchTerms = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('terms')
+        .select('*')
+        .order('display_order', { ascending: false })
 
-        if (error) {
-          console.warn('Terms table not available:', error.message)
-          return
-        }
-
-        if (data && data.length > 0) {
-          setTerms(data)
-          const active = data.find((t: Term) => t.is_active)
-          setSelectedTermId(active?.id ?? data[0]?.id ?? null)
-        }
-      } catch (err) {
-        console.warn('Terms fetch failed:', err)
-      } finally {
-        setLoading(false)
+      if (error) {
+        console.warn('Terms table not available:', error.message)
+        return
       }
+
+      if (data && data.length > 0) {
+        setTerms(data)
+        // 初回ロード時のみ自動選択
+        setSelectedTermId((prev) => {
+          if (prev && data.find((t: Term) => t.id === prev)) return prev
+          const active = data.find((t: Term) => t.is_active)
+          return active?.id ?? data[0]?.id ?? null
+        })
+      }
+    } catch (err) {
+      console.warn('Terms fetch failed:', err)
+    } finally {
+      setLoading(false)
     }
-    fetchTerms()
   }, [])
+
+  useEffect(() => {
+    fetchTerms()
+  }, [fetchTerms])
 
   const activeTerm = terms.find((t) => t.id === selectedTermId) ?? null
 
   return (
-    <TermContext.Provider value={{ terms, activeTerm, selectedTermId, setSelectedTermId, loading }}>
+    <TermContext.Provider value={{ terms, activeTerm, selectedTermId, setSelectedTermId, loading, refreshTerms: fetchTerms }}>
       {children}
     </TermContext.Provider>
   )

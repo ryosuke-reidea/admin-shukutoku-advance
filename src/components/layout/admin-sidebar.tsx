@@ -24,6 +24,7 @@ import {
   ClipboardList,
   LogOut,
   Menu,
+  CalendarDays,
 } from 'lucide-react'
 
 interface NavItem {
@@ -37,6 +38,7 @@ const adminNav: NavItem[] = [
   { label: '講座概要', href: '/admin/courses', icon: BookOpen },
   { label: '申込生徒一覧', href: '/admin/students', icon: Users },
   { label: '売上管理', href: '/admin/revenue', icon: DollarSign },
+  { label: '会期管理', href: '/admin/terms', icon: CalendarDays },
   { label: 'フロント情報登録', href: '/admin/front-content', icon: FileEdit },
   { label: 'お問い合わせ', href: '/admin/contacts', icon: Mail },
   { label: 'サイネージ', href: '/admin/signage', icon: Monitor },
