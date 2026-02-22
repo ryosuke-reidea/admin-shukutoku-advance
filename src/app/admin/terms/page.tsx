@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Plus, Pencil, Trash2, CheckCircle } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { Plus, Pencil, Trash2, Power, Globe } from 'lucide-react'
 import { useTermContext } from '@/components/term-selector'
 import type { Term } from '@/lib/types/database'
 
@@ -17,8 +18,10 @@ export default function AdminTermsPage() {
   const { refreshTerms } = useTermContext()
   const [terms, setTerms] = useState<Term[]>([])
   const [loading, setLoading] = useState(true)
+  const [switching, setSwitching] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTerm, setEditingTerm] = useState<Term | null>(null)
+  const [confirmTerm, setConfirmTerm] = useState<Term | null>(null)
 
   // Form state
   const [name, setName] = useState('')
@@ -111,6 +114,7 @@ export default function AdminTermsPage() {
   }
 
   const handleSetActive = async (termId: string) => {
+    setSwitching(termId)
     const supabase = createClient()
     try {
       // 全会期をfalseにリセット
@@ -129,11 +133,13 @@ export default function AdminTermsPage() {
       await refreshTerms()
     } catch (error) {
       console.error('Error setting active term:', error)
+    } finally {
+      setSwitching(null)
+      setConfirmTerm(null)
     }
   }
 
   const handleDelete = async (termId: string) => {
-    if (!confirm('この会期を削除しますか？紐づく講座や申込データがある場合は削除できません。')) return
     const supabase = createClient()
     try {
       const { error } = await supabase
@@ -172,11 +178,9 @@ export default function AdminTermsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold">会期管理</h1>
-          {activeTerm && (
-            <p className="text-sm text-muted-foreground mt-1">
-              現在有効: <span className="font-medium text-foreground">{activeTerm.name}</span>
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground mt-1">
+            有効な会期のデータのみフロントサイトに表示されます
+          </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
           <DialogTrigger asChild>
@@ -260,9 +264,38 @@ export default function AdminTermsPage() {
         </Dialog>
       </div>
 
+      {/* 現在有効な会期の表示 */}
+      {activeTerm && (
+        <Card className="border-green-200 bg-green-50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-green-600" />
+              <CardTitle className="text-base">現在フロントに公開中の会期</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+              <div>
+                <p className="text-lg font-bold text-green-800">{activeTerm.name}</p>
+                <p className="text-sm text-green-700">{activeTerm.start_date} 〜 {activeTerm.end_date}</p>
+              </div>
+              {activeTerm.enrollment_start && activeTerm.enrollment_end && (
+                <div className="text-sm text-green-700">
+                  申込受付: {activeTerm.enrollment_start} 〜 {activeTerm.enrollment_end}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 会期一覧テーブル */}
       <Card>
         <CardHeader>
           <CardTitle>会期一覧 ({terms.length}件)</CardTitle>
+          <CardDescription>
+            「有効にする」ボタンで会期を切り替えると、フロントサイトの表示が即座に変わります
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {terms.length === 0 ? (
@@ -272,7 +305,7 @@ export default function AdminTermsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>順序</TableHead>
+                    <TableHead className="w-[60px]">順序</TableHead>
                     <TableHead>会期名</TableHead>
                     <TableHead className="hidden sm:table-cell">期間</TableHead>
                     <TableHead className="hidden md:table-cell">申込受付期間</TableHead>
@@ -282,8 +315,8 @@ export default function AdminTermsPage() {
                 </TableHeader>
                 <TableBody>
                   {terms.map((term) => (
-                    <TableRow key={term.id} className={term.is_active ? 'bg-green-50' : ''}>
-                      <TableCell className="text-sm">{term.display_order}</TableCell>
+                    <TableRow key={term.id} className={term.is_active ? 'bg-green-50/50' : ''}>
+                      <TableCell className="text-sm text-muted-foreground">{term.display_order}</TableCell>
                       <TableCell>
                         <div className="font-medium text-sm">{term.name}</div>
                         <div className="text-xs text-muted-foreground">{term.slug}</div>
@@ -301,12 +334,13 @@ export default function AdminTermsPage() {
                       </TableCell>
                       <TableCell>
                         {term.is_active ? (
-                          <Badge variant="default" className="text-xs">
-                            有効
+                          <Badge className="text-xs bg-green-600 hover:bg-green-700">
+                            <Globe className="h-3 w-3 mr-1" />
+                            公開中
                           </Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs">
-                            無効
+                            非公開
                           </Badge>
                         )}
                       </TableCell>
@@ -314,13 +348,14 @@ export default function AdminTermsPage() {
                         <div className="flex items-center gap-1">
                           {!term.is_active && (
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              onClick={() => handleSetActive(term.id)}
-                              title="この会期を有効にする"
-                              className="h-8 w-8 p-0"
+                              onClick={() => setConfirmTerm(term)}
+                              disabled={switching === term.id}
+                              className="h-8 text-xs text-green-700 border-green-300 hover:bg-green-50 hover:text-green-800"
                             >
-                              <CheckCircle className="h-4 w-4 text-green-600" />
+                              <Power className="h-3.5 w-3.5 mr-1" />
+                              {switching === term.id ? '切替中...' : '有効にする'}
                             </Button>
                           )}
                           <Button
@@ -328,6 +363,7 @@ export default function AdminTermsPage() {
                             size="sm"
                             onClick={() => openEdit(term)}
                             className="h-8 w-8 p-0"
+                            title="編集"
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -337,6 +373,7 @@ export default function AdminTermsPage() {
                               size="sm"
                               onClick={() => handleDelete(term.id)}
                               className="h-8 w-8 p-0"
+                              title="削除"
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
@@ -351,6 +388,31 @@ export default function AdminTermsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* 有効化確認ダイアログ */}
+      <AlertDialog open={!!confirmTerm} onOpenChange={(open) => { if (!open) setConfirmTerm(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>会期を切り替えますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「<strong>{confirmTerm?.name}</strong>」を有効にします。
+              {activeTerm && (
+                <>現在有効な「{activeTerm.name}」は無効になります。</>
+              )}
+              フロントサイトの表示内容が即座に切り替わります。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => confirmTerm && handleSetActive(confirmTerm.id)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              有効にする
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
