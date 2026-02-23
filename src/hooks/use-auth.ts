@@ -125,6 +125,9 @@ export function useAuth() {
           setUser(session.user)
           if (event === 'SIGNED_IN') {
             profileCache = null // 新規ログイン時はキャッシュクリア
+            // ログインページ側のプロフィール取得/作成との競合を防ぐため少し待機
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+            if (!isMounted.current) return
           }
           const profileData = await fetchProfile(session.user.id, session.user.email)
           if (isMounted.current) setProfile(profileData)

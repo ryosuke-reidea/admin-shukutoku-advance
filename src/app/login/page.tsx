@@ -8,6 +8,64 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
+// リトライ付きのプロフィール取得/作成
+async function getOrCreateProfile(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  userEmail: string,
+  maxRetries = 3
+): Promise<{ role: string } | null> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // プロフィール取得を試みる
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+      if (profile && !profileError) {
+        return profile
+      }
+
+      // プロフィールが無い場合、作成を試みる
+      if (attempt === 0) {
+        console.warn('Profile not found, attempting auto-create for:', userEmail)
+      }
+
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: userEmail,
+          role: 'admin',
+          display_name: userEmail.split('@')[0] || 'ユーザー',
+        })
+
+      // 既に存在する場合（競合挿入）はエラーでも再取得すればOK
+      if (insertError && !insertError.message.includes('duplicate')) {
+        console.error('Profile insert error:', insertError.message)
+      }
+
+      // 少し待ってから再取得
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      const { data: newProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+      if (newProfile) return newProfile
+    } catch (err) {
+      console.warn(`Profile fetch attempt ${attempt + 1} failed:`, err)
+      // リトライ前に待機
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
+    }
+  }
+  return null
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -43,48 +101,13 @@ export default function LoginPage() {
         return
       }
 
-      // Step 2: プロフィール取得
-      let { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
+      // Step 2: プロフィール取得/作成（リトライ付き）
+      const profile = await getOrCreateProfile(supabase, user.id, user.email || email)
 
-      // プロフィールが見つからない場合、自動作成を試みる
-      if (profileError || !profile) {
-        console.warn('Profile not found, attempting auto-create for:', user.email)
-
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email || email,
-            role: 'admin', // 管理画面からのログインなのでデフォルトadmin（後で変更可能）
-            display_name: user.email?.split('@')[0] || 'ユーザー',
-          })
-
-        if (insertError) {
-          console.error('Profile auto-create error:', insertError.message, insertError)
-          setError(`プロフィール作成エラー: ${insertError.message}。管理者にお問い合わせください。`)
-          setLoading(false)
-          return
-        }
-
-        // 再取得
-        const { data: newProfile, error: newProfileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-
-        if (newProfileError || !newProfile) {
-          console.error('Profile re-fetch error:', newProfileError?.message)
-          setError('プロフィールの作成に失敗しました。管理者にお問い合わせください。')
-          setLoading(false)
-          return
-        }
-
-        profile = newProfile
+      if (!profile) {
+        setError('プロフィールの取得に失敗しました。管理者にお問い合わせください。')
+        setLoading(false)
+        return
       }
 
       // Only allow admin, instructor, tutor roles
