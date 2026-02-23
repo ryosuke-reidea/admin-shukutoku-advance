@@ -63,7 +63,7 @@ export default function AdminStudentsPage() {
         // course_idがNULLの個別指導もfetchするためleft joinスタイル
         const { data } = await supabase
           .from('enrollments')
-          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!left(*, category:course_categories(*))')
+          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!enrollments_course_id_fkey(*, category:course_categories(*))')
           .eq('term_id', selectedTermId)
           .order('created_at', { ascending: false })
 

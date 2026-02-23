@@ -119,18 +119,19 @@ export default function LoginPage() {
       }
 
       // Step 3: ロールに応じてリダイレクト
+      // window.location.href を使用してフルリロードし、auth stateを確実に更新
       switch (profile.role) {
         case 'admin':
-          router.push('/admin')
+          window.location.href = '/admin'
           break
         case 'instructor':
-          router.push('/instructor')
+          window.location.href = '/instructor'
           break
         case 'tutor':
-          router.push('/tutor')
+          window.location.href = '/tutor'
           break
         default:
-          router.push('/login')
+          window.location.href = '/login'
       }
     } catch (err) {
       console.error('Login exception:', err)

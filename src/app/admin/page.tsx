@@ -37,7 +37,7 @@ export default function AdminDashboard() {
         supabase.from('enrollments').select('payment_amount').eq('term_id', selectedTermId).neq('payment_status', 'paid'),
         supabase.from('contact_submissions').select('*', { count: 'exact', head: true }).eq('status', 'unread'),
         supabase.from('enrollments')
-          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!left(*)')
+          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!enrollments_course_id_fkey(*)')
           .eq('term_id', selectedTermId)
           .order('created_at', { ascending: false })
           .limit(10),

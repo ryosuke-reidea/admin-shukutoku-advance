@@ -117,11 +117,14 @@ export default function AdminTermsPage() {
     setSwitching(termId)
     const supabase = createClient()
     try {
-      // 全会期をfalseにリセット
-      await supabase
-        .from('terms')
-        .update({ is_active: false })
-        .neq('id', '')
+      // 現在有効な会期を全て無効化（is_active=trueのものだけ対象にして確実に動作させる）
+      const activeTermIds = terms.filter((t) => t.is_active).map((t) => t.id)
+      if (activeTermIds.length > 0) {
+        await supabase
+          .from('terms')
+          .update({ is_active: false })
+          .in('id', activeTermIds)
+      }
 
       // 対象をtrueに
       await supabase

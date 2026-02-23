@@ -72,7 +72,7 @@ export default function StudentDetailPage() {
             .single(),
           supabase
             .from('enrollments')
-            .select('*, course:courses!left(*, category:course_categories(*))')
+            .select('*, course:courses!enrollments_course_id_fkey(*, category:course_categories(*))')
             .eq('student_id', studentId)
             .order('created_at', { ascending: false }),
         ])
