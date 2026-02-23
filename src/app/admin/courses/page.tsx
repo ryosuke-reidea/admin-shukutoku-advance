@@ -9,8 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Monitor, Upload } from 'lucide-react'
-import { COURSE_TYPES } from '@/lib/constants'
-import type { Course, CourseCategory } from '@/lib/types/database'
+import { COURSE_TYPES, ENROLLMENT_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
+import type { Course, CourseCategory, Enrollment, Profile } from '@/lib/types/database'
 import { formatTime } from '@/lib/utils'
 import { useTermContext } from '@/components/term-selector'
 
@@ -18,10 +18,33 @@ interface CourseWithCount extends Course {
   enrollment_count: number
 }
 
+interface IndividualEnrollment extends Enrollment {
+  student: Profile
+}
+
+// 個別指導のnotesからメタデータを取得
+function parseIndividualNotes(notes: string | null): { day?: string; period?: string; subject?: string; format?: string } | null {
+  if (!notes) return null
+  try {
+    const parsed = JSON.parse(notes)
+    if (parsed.type === 'individual') return parsed
+    return null
+  } catch {
+    return null
+  }
+}
+
+const INDIVIDUAL_FORMAT_LABELS: Record<string, string> = {
+  individual_1on1: '1対1',
+  individual_1on2: '1対2',
+  individual_1on3: '1対3',
+}
+
 export default function AdminCoursesPage() {
   const { selectedTermId, loading: termLoading } = useTermContext()
   const [categories, setCategories] = useState<CourseCategory[]>([])
   const [coursesByCategory, setCoursesByCategory] = useState<Record<string, CourseWithCount[]>>({})
+  const [individualEnrollments, setIndividualEnrollments] = useState<IndividualEnrollment[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
@@ -29,13 +52,21 @@ export default function AdminCoursesPage() {
     setLoading(true)
     const supabase = createClient()
     try {
-      const [catsRes, coursesRes] = await Promise.all([
+      const [catsRes, coursesRes, individualRes] = await Promise.all([
         supabase.from('course_categories').select('*').order('display_order'),
         supabase.from('courses').select('*, enrollments(count)').eq('term_id', selectedTermId).order('display_order'),
+        // 個別指導の申込（course_idがNULL）を取得
+        supabase
+          .from('enrollments')
+          .select('*, student:profiles!enrollments_student_id_fkey(*)')
+          .eq('term_id', selectedTermId)
+          .is('course_id', null)
+          .order('created_at', { ascending: false }),
       ])
 
       const cats = catsRes.data || []
       setCategories(cats)
+      setIndividualEnrollments((individualRes.data as unknown as IndividualEnrollment[]) || [])
 
       if (coursesRes.data && cats.length > 0) {
         const grouped: Record<string, CourseWithCount[]> = {}
@@ -109,6 +140,14 @@ export default function AdminCoursesPage() {
                 {cat.name}
               </TabsTrigger>
             ))}
+            <TabsTrigger value="individual" className="text-xs sm:text-sm">
+              個別
+              {individualEnrollments.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0">
+                  {individualEnrollments.length}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           {categories.map((cat) => (
@@ -169,6 +208,75 @@ export default function AdminCoursesPage() {
               </Card>
             </TabsContent>
           ))}
+
+          {/* 個別指導タブ */}
+          <TabsContent value="individual">
+            <Card>
+              <CardHeader>
+                <CardTitle>個別指導 申込一覧 ({individualEnrollments.length}件)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {individualEnrollments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">この会期の個別指導の申込はありません。</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>生徒名</TableHead>
+                          <TableHead>曜日/時限</TableHead>
+                          <TableHead className="hidden sm:table-cell">教科</TableHead>
+                          <TableHead className="hidden md:table-cell">形態</TableHead>
+                          <TableHead>ステータス</TableHead>
+                          <TableHead>支払い</TableHead>
+                          <TableHead className="hidden sm:table-cell">申込日</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {individualEnrollments.map((enrollment) => {
+                          const notes = parseIndividualNotes(enrollment.notes)
+                          return (
+                            <TableRow key={enrollment.id}>
+                              <TableCell>
+                                <Link
+                                  href={`/admin/students/${enrollment.student_id}`}
+                                  className="font-medium text-primary hover:underline text-sm"
+                                >
+                                  {enrollment.student?.display_name || '不明'}
+                                </Link>
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {notes ? `${notes.day}曜 ${notes.period}` : '-'}
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell text-sm">
+                                {notes?.subject || '-'}
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell text-sm">
+                                {notes?.format ? (INDIVIDUAL_FORMAT_LABELS[notes.format] || notes.format) : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {ENROLLMENT_STATUSES[enrollment.status as keyof typeof ENROLLMENT_STATUSES] || enrollment.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'} className="text-xs">
+                                  {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell text-sm">
+                                {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       )}
     </div>

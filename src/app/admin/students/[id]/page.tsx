@@ -16,7 +16,25 @@ import type { Profile, Enrollment, Course, CourseCategory } from '@/lib/types/da
 import { formatTime } from '@/lib/utils'
 
 interface EnrollmentWithCourse extends Enrollment {
-  course: Course & { category: CourseCategory }
+  course: (Course & { category: CourseCategory }) | null
+}
+
+// 個別指導のnotesからメタデータを取得
+function parseIndividualNotes(notes: string | null): { day?: string; period?: string; subject?: string; format?: string } | null {
+  if (!notes) return null
+  try {
+    const parsed = JSON.parse(notes)
+    if (parsed.type === 'individual') return parsed
+    return null
+  } catch {
+    return null
+  }
+}
+
+const INDIVIDUAL_FORMAT_LABELS: Record<string, string> = {
+  individual_1on1: '1対1',
+  individual_1on2: '1対2',
+  individual_1on3: '1対3',
 }
 
 const PAYMENT_STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -54,7 +72,7 @@ export default function StudentDetailPage() {
             .single(),
           supabase
             .from('enrollments')
-            .select('*, course:courses!enrollments_course_id_fkey(*, category:course_categories(*))')
+            .select('*, course:courses!left(*, category:course_categories(*))')
             .eq('student_id', studentId)
             .order('created_at', { ascending: false }),
         ])
@@ -133,7 +151,7 @@ export default function StudentDetailPage() {
 
   // Group enrollments by term
   const enrollmentsByTerm = enrollments.reduce<Record<string, EnrollmentWithCourse[]>>((acc, enrollment) => {
-    const term = enrollment.course?.term || '未設定'
+    const term = enrollment.course?.term || (enrollment.course_id ? '未設定' : '個別指導')
     if (!acc[term]) acc[term] = []
     acc[term].push(enrollment)
     return acc
@@ -304,20 +322,41 @@ export default function StudentDetailPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {termEnrollments.map((enrollment) => (
+                      {termEnrollments.map((enrollment) => {
+                        const isIndividual = !enrollment.course_id || !enrollment.course
+                        const individualNotes = parseIndividualNotes(enrollment.notes)
+                        return (
                         <TableRow key={enrollment.id}>
                           <TableCell className="font-medium text-sm">
-                            {enrollment.course?.name || '-'}
+                            {isIndividual ? (
+                              <div>
+                                <span>個別指導</span>
+                                {individualNotes && (
+                                  <span className="text-muted-foreground ml-1 text-xs">
+                                    {individualNotes.subject && `${individualNotes.subject} `}
+                                    {individualNotes.format && `(${INDIVIDUAL_FORMAT_LABELS[individualNotes.format] || individualNotes.format})`}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              enrollment.course?.name || '-'
+                            )}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
-                            <Badge variant="outline" className="text-xs">
-                              {enrollment.course?.category?.name || '-'}
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                              style={isIndividual ? { borderColor: '#9333ea', color: '#7c3aed' } : undefined}
+                            >
+                              {isIndividual ? '個別' : enrollment.course?.category?.name || '-'}
                             </Badge>
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-sm whitespace-nowrap">
-                            {enrollment.course?.day_of_week && enrollment.course?.start_time
-                              ? `${enrollment.course.day_of_week} ${formatTime(enrollment.course.start_time)}~${formatTime(enrollment.course.end_time)}`
-                              : '-'}
+                            {isIndividual && individualNotes
+                              ? `${individualNotes.day}曜 ${individualNotes.period}`
+                              : enrollment.course?.day_of_week && enrollment.course?.start_time
+                                ? `${enrollment.course.day_of_week} ${formatTime(enrollment.course.start_time)}~${formatTime(enrollment.course.end_time)}`
+                                : '-'}
                           </TableCell>
                           <TableCell className="font-medium text-sm whitespace-nowrap">
                             ¥{(enrollment.payment_amount || 0).toLocaleString()}
@@ -369,7 +408,8 @@ export default function StudentDetailPage() {
                             {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>

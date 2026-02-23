@@ -11,7 +11,7 @@ import type { Enrollment, Profile, Course } from '@/lib/types/database'
 
 interface EnrollmentWithRelations extends Enrollment {
   student: Profile
-  course: Course
+  course: Course | null
 }
 
 export default function AdminDashboard() {
@@ -37,7 +37,7 @@ export default function AdminDashboard() {
         supabase.from('enrollments').select('payment_amount').eq('term_id', selectedTermId).neq('payment_status', 'paid'),
         supabase.from('contact_submissions').select('*', { count: 'exact', head: true }).eq('status', 'unread'),
         supabase.from('enrollments')
-          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!enrollments_course_id_fkey(*)')
+          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!left(*)')
           .eq('term_id', selectedTermId)
           .order('created_at', { ascending: false })
           .limit(10),
@@ -147,29 +147,46 @@ export default function AdminDashboard() {
             <p className="text-sm text-muted-foreground">この会期の申込データはありません。</p>
           ) : (
             <div className="space-y-3">
-              {recentEnrollments.map((enrollment) => (
-                <div
-                  key={enrollment.id}
-                  className="flex items-center justify-between rounded-md border p-3"
-                >
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">
-                      {enrollment.student?.display_name || enrollment.student?.email || '不明'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {enrollment.course?.name || '不明な講座'}
-                    </p>
+              {recentEnrollments.map((enrollment) => {
+                const isIndividual = !enrollment.course_id || !enrollment.course
+                let courseName = enrollment.course?.name || '不明な講座'
+                if (isIndividual && enrollment.notes) {
+                  try {
+                    const parsed = JSON.parse(enrollment.notes)
+                    if (parsed.type === 'individual') {
+                      courseName = `個別指導 ${parsed.day || ''}曜 ${parsed.period || ''}`
+                    }
+                  } catch { /* ignore */ }
+                }
+                return (
+                  <div
+                    key={enrollment.id}
+                    className="flex items-center justify-between rounded-md border p-3"
+                  >
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {enrollment.student?.display_name || enrollment.student?.email || '不明'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {courseName}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isIndividual && (
+                        <Badge variant="outline" className="text-xs" style={{ borderColor: '#9333ea', color: '#7c3aed' }}>
+                          個別
+                        </Badge>
+                      )}
+                      <Badge variant="outline">
+                        {ENROLLMENT_STATUSES[enrollment.status as keyof typeof ENROLLMENT_STATUSES] || enrollment.status}
+                      </Badge>
+                      <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'}>
+                        {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">
-                      {ENROLLMENT_STATUSES[enrollment.status as keyof typeof ENROLLMENT_STATUSES] || enrollment.status}
-                    </Badge>
-                    <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'}>
-                      {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>

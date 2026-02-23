@@ -16,7 +16,7 @@ import { useTermContext } from '@/components/term-selector'
 
 interface EnrollmentWithRelations extends Enrollment {
   student: Profile
-  course: Course & { category: CourseCategory }
+  course: (Course & { category: CourseCategory }) | null
 }
 
 const CATEGORY_TABS = [
@@ -25,7 +25,26 @@ const CATEGORY_TABS = [
   { value: 'recommendation', label: '推薦' },
   { value: 'ryugata', label: '留型' },
   { value: 'junior', label: '中学' },
+  { value: 'individual', label: '個別' },
 ]
+
+// 個別指導のnotesからメタデータを取得するヘルパー
+function parseIndividualNotes(notes: string | null): { day?: string; period?: string; subject?: string; format?: string } | null {
+  if (!notes) return null
+  try {
+    const parsed = JSON.parse(notes)
+    if (parsed.type === 'individual') return parsed
+    return null
+  } catch {
+    return null
+  }
+}
+
+const INDIVIDUAL_FORMAT_LABELS: Record<string, string> = {
+  individual_1on1: '1対1',
+  individual_1on2: '1対2',
+  individual_1on3: '1対3',
+}
 
 export default function AdminStudentsPage() {
   const { selectedTermId, loading: termLoading } = useTermContext()
@@ -40,10 +59,11 @@ export default function AdminStudentsPage() {
       setLoading(true)
       const supabase = createClient()
       try {
-        // enrollmentsテーブル自体のterm_idで直接フィルタ（embedded filterの問題を回避）
+        // enrollmentsテーブル自体のterm_idで直接フィルタ
+        // course_idがNULLの個別指導もfetchするためleft joinスタイル
         const { data } = await supabase
           .from('enrollments')
-          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!enrollments_course_id_fkey(*, category:course_categories(*))')
+          .select('*, student:profiles!enrollments_student_id_fkey(*), course:courses!left(*, category:course_categories(*))')
           .eq('term_id', selectedTermId)
           .order('created_at', { ascending: false })
 
@@ -64,7 +84,10 @@ export default function AdminStudentsPage() {
     let filtered = enrollments
 
     // Category filter
-    if (activeTab !== 'all') {
+    if (activeTab === 'individual') {
+      // 個別指導：course_idがNULL（個別指導申込）
+      filtered = filtered.filter((e) => !e.course_id || !e.course)
+    } else if (activeTab !== 'all') {
       filtered = filtered.filter((e) => e.course?.category?.slug === activeTab)
     }
 
@@ -76,11 +99,14 @@ export default function AdminStudentsPage() {
         const studentEmail = e.student?.email?.toLowerCase() || ''
         const courseName = e.course?.name?.toLowerCase() || ''
         const categoryName = e.course?.category?.name?.toLowerCase() || ''
+        const notes = parseIndividualNotes(e.notes)
+        const notesSubject = notes?.subject?.toLowerCase() || ''
         return (
           studentName.includes(query) ||
           studentEmail.includes(query) ||
           courseName.includes(query) ||
-          categoryName.includes(query)
+          categoryName.includes(query) ||
+          notesSubject.includes(query)
         )
       })
     }
@@ -92,7 +118,10 @@ export default function AdminStudentsPage() {
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: enrollments.length }
     CATEGORY_TABS.forEach((tab) => {
-      if (tab.value !== 'all') {
+      if (tab.value === 'all') return
+      if (tab.value === 'individual') {
+        counts[tab.value] = enrollments.filter((e) => !e.course_id || !e.course).length
+      } else {
         counts[tab.value] = enrollments.filter((e) => e.course?.category?.slug === tab.value).length
       }
     })
@@ -165,51 +194,78 @@ export default function AdminStudentsPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredEnrollments.map((enrollment) => (
-                          <TableRow key={enrollment.id}>
-                            <TableCell className="font-medium">
-                              <Link
-                                href={`/admin/students/${enrollment.student_id}`}
-                                className="text-primary hover:underline text-sm"
-                              >
-                                {enrollment.student?.display_name || '不明'}
-                              </Link>
-                              <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-[120px]">
+                        {filteredEnrollments.map((enrollment) => {
+                          const individualNotes = parseIndividualNotes(enrollment.notes)
+                          const isIndividual = !enrollment.course_id || !enrollment.course
+                          return (
+                            <TableRow key={enrollment.id}>
+                              <TableCell className="font-medium">
+                                <Link
+                                  href={`/admin/students/${enrollment.student_id}`}
+                                  className="text-primary hover:underline text-sm"
+                                >
+                                  {enrollment.student?.display_name || '不明'}
+                                </Link>
+                                <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-[120px]">
+                                  {enrollment.student?.email || '-'}
+                                </div>
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell text-sm">
                                 {enrollment.student?.email || '-'}
-                              </div>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell text-sm">
-                              {enrollment.student?.email || '-'}
-                            </TableCell>
-                            <TableCell className="text-sm max-w-[120px] sm:max-w-none truncate">{enrollment.course?.name || '-'}</TableCell>
-                            <TableCell className="hidden sm:table-cell">
-                              <Badge variant="outline" className="text-xs">
-                                {enrollment.course?.category?.name || '-'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell">
-                              <Badge variant="outline" className="text-xs">
-                                {ENROLLMENT_STATUSES[enrollment.status as keyof typeof ENROLLMENT_STATUSES] || enrollment.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'} className="text-xs">
-                                {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="hidden sm:table-cell text-sm">
-                              {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
-                            </TableCell>
-                            <TableCell>
-                              <Link href={`/admin/students/${enrollment.student_id}`}>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 sm:h-auto sm:w-auto sm:px-3">
-                                  <Eye className="h-4 w-4 sm:mr-1" />
-                                  <span className="hidden sm:inline">詳細</span>
-                                </Button>
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                              <TableCell className="text-sm max-w-[120px] sm:max-w-none">
+                                {isIndividual && individualNotes ? (
+                                  <div>
+                                    <span className="font-medium">個別指導</span>
+                                    <span className="text-muted-foreground ml-1 text-xs">
+                                      {individualNotes.day}曜 {individualNotes.period}
+                                    </span>
+                                    {individualNotes.subject && (
+                                      <span className="text-muted-foreground ml-1 text-xs">/ {individualNotes.subject}</span>
+                                    )}
+                                    {individualNotes.format && (
+                                      <span className="text-muted-foreground ml-1 text-xs">
+                                        ({INDIVIDUAL_FORMAT_LABELS[individualNotes.format] || individualNotes.format})
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="truncate">{enrollment.course?.name || '-'}</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell">
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs"
+                                  style={isIndividual ? { borderColor: '#9333ea', color: '#7c3aed' } : undefined}
+                                >
+                                  {isIndividual ? '個別' : enrollment.course?.category?.name || '-'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell">
+                                <Badge variant="outline" className="text-xs">
+                                  {ENROLLMENT_STATUSES[enrollment.status as keyof typeof ENROLLMENT_STATUSES] || enrollment.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={enrollment.payment_status === 'paid' ? 'default' : 'secondary'} className="text-xs">
+                                  {PAYMENT_STATUSES[enrollment.payment_status as keyof typeof PAYMENT_STATUSES] || enrollment.payment_status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell text-sm">
+                                {new Date(enrollment.created_at).toLocaleDateString('ja-JP')}
+                              </TableCell>
+                              <TableCell>
+                                <Link href={`/admin/students/${enrollment.student_id}`}>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 sm:h-auto sm:w-auto sm:px-3">
+                                    <Eye className="h-4 w-4 sm:mr-1" />
+                                    <span className="hidden sm:inline">詳細</span>
+                                  </Button>
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </div>
