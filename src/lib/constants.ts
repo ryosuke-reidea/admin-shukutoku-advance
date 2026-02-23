@@ -25,8 +25,8 @@ export const COURSE_TYPES = {
 
 export const PAYMENT_METHODS = {
   bank_transfer: '銀行振込',
-  installment_1: '口座引落（分割1回目）',
-  installment_2: '口座引落（分割2回目）',
+  account_transfer_lump: '口座振替（一括）',
+  account_transfer_installment: '口座振替（分割）',
 } as const
 
 export const PAYMENT_STATUSES = {

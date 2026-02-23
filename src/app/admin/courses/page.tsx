@@ -23,7 +23,7 @@ interface IndividualEnrollment extends Enrollment {
 }
 
 // 個別指導のnotesからメタデータを取得
-function parseIndividualNotes(notes: string | null): { day?: string; period?: string; subject?: string; format?: string } | null {
+function parseIndividualNotes(notes: string | null): { day?: string; period?: string; subject?: string; subjects?: string[]; courseCount?: number; format?: string } | null {
   if (!notes) return null
   try {
     const parsed = JSON.parse(notes)
@@ -32,6 +32,14 @@ function parseIndividualNotes(notes: string | null): { day?: string; period?: st
   } catch {
     return null
   }
+}
+
+// 個別指導の教科表示を取得するヘルパー
+function getIndividualSubjectDisplay(notes: { subject?: string; subjects?: string[] } | null): string {
+  if (!notes) return ''
+  if (notes.subjects && notes.subjects.length > 0) return notes.subjects.join('・')
+  if (notes.subject) return notes.subject
+  return ''
 }
 
 const INDIVIDUAL_FORMAT_LABELS: Record<string, string> = {
@@ -249,7 +257,7 @@ export default function AdminCoursesPage() {
                                 {notes ? `${notes.day}曜 ${notes.period}` : '-'}
                               </TableCell>
                               <TableCell className="hidden sm:table-cell text-sm">
-                                {notes?.subject || '-'}
+                                {getIndividualSubjectDisplay(notes) || '-'}
                               </TableCell>
                               <TableCell className="hidden md:table-cell text-sm">
                                 {notes?.format ? (INDIVIDUAL_FORMAT_LABELS[notes.format] || notes.format) : '-'}

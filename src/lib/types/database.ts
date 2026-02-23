@@ -80,7 +80,7 @@ export interface TimetableSlot {
   course?: Course
 }
 
-export type PaymentMethod = 'bank_transfer' | 'installment_1' | 'installment_2'
+export type PaymentMethod = 'bank_transfer' | 'account_transfer_lump' | 'account_transfer_installment'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded'
 export type EnrollmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed'
 

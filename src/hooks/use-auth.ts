@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types/database'
@@ -13,62 +12,40 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
   const isMounted = useRef(true)
+  const initDone = useRef(false)
 
   useEffect(() => {
     isMounted.current = true
+    initDone.current = false
     const supabase = createClient()
 
-    const fetchProfile = async (userId: string, userEmail?: string) => {
+    const fetchProfile = async (userId: string, retries = 3): Promise<Profile | null> => {
       // キャッシュがあればそれを使う
       if (profileCache && profileCache.userId === userId) {
         return profileCache.data
       }
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
+      for (let attempt = 0; attempt < retries; attempt++) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single()
 
-      if (error || !data) {
-        // プロフィールが見つからない場合、自動作成を試みる
-        if (userEmail) {
-          console.warn('Profile not found in useAuth, attempting auto-create:', userEmail)
-          const { error: insertError } = await supabase
-            .from('profiles')
-            .insert({
-              id: userId,
-              email: userEmail,
-              role: 'student',
-              display_name: userEmail.split('@')[0] || 'ユーザー',
-            })
-
-          if (!insertError) {
-            // 再取得
-            const { data: newData } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', userId)
-              .single()
-
-            if (newData) {
-              profileCache = { userId, data: newData }
-              return newData
-            }
-          } else {
-            console.error('Profile auto-create error:', insertError.message)
-          }
+        if (data && !error) {
+          profileCache = { userId, data }
+          return data
         }
-        if (error) console.error('Profile fetch error:', error.message)
-        return null
+
+        // リトライ前に待機（プロフィールがログインページで作成中の可能性がある）
+        if (attempt < retries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)))
+        }
       }
 
-      if (data) {
-        profileCache = { userId, data }
-      }
-      return data
+      console.error('Profile not found after retries for userId:', userId)
+      return null
     }
 
     const initAuth = async () => {
@@ -81,15 +58,17 @@ export function useAuth() {
           setUser(null)
           setProfile(null)
           setLoading(false)
+          initDone.current = true
           return
         }
 
         setUser(authUser)
 
-        const profileData = await fetchProfile(authUser.id, authUser.email)
+        const profileData = await fetchProfile(authUser.id)
         if (isMounted.current) {
           setProfile(profileData)
           setLoading(false)
+          initDone.current = true
         }
       } catch (err) {
         console.error('Auth init error:', err)
@@ -97,18 +76,20 @@ export function useAuth() {
           setUser(null)
           setProfile(null)
           setLoading(false)
+          initDone.current = true
         }
       }
     }
 
     initAuth()
 
-    // Safety timeout - 5秒に短縮
+    // Safety timeout - 8秒
     const timeout = setTimeout(() => {
-      if (isMounted.current) {
+      if (isMounted.current && loading) {
         setLoading(false)
+        initDone.current = true
       }
-    }, 5000)
+    }, 8000)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: string, session: { user: User } | null) => {
@@ -121,15 +102,17 @@ export function useAuth() {
           return
         }
 
+        // initAuthが完了するまでSIGNED_INイベントは無視（重複処理防止）
+        if (event === 'SIGNED_IN' && !initDone.current) {
+          return
+        }
+
         if (session?.user) {
           setUser(session.user)
           if (event === 'SIGNED_IN') {
-            profileCache = null // 新規ログイン時はキャッシュクリア
-            // ログインページ側のプロフィール取得/作成との競合を防ぐため少し待機
-            await new Promise((resolve) => setTimeout(resolve, 1000))
-            if (!isMounted.current) return
+            profileCache = null
           }
-          const profileData = await fetchProfile(session.user.id, session.user.email)
+          const profileData = await fetchProfile(session.user.id)
           if (isMounted.current) setProfile(profileData)
         }
       }
@@ -148,8 +131,8 @@ export function useAuth() {
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
-    router.push('/login')
-  }, [router])
+    window.location.href = '/login'
+  }, [])
 
   return { user, profile, loading, signOut }
 }

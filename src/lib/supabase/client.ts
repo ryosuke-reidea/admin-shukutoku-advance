@@ -15,11 +15,6 @@ export function createClient() {
     )
   }
 
-  client = createBrowserClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      storageKey: 'sb-admin-auth-token',
-      flowType: 'pkce',
-    },
-  })
+  client = createBrowserClient(supabaseUrl, supabaseAnonKey)
   return client
 }

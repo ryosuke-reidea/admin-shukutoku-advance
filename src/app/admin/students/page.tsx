@@ -29,7 +29,7 @@ const CATEGORY_TABS = [
 ]
 
 // 個別指導のnotesからメタデータを取得するヘルパー
-function parseIndividualNotes(notes: string | null): { day?: string; period?: string; subject?: string; format?: string } | null {
+function parseIndividualNotes(notes: string | null): { day?: string; period?: string; subject?: string; subjects?: string[]; courseCount?: number; format?: string } | null {
   if (!notes) return null
   try {
     const parsed = JSON.parse(notes)
@@ -38,6 +38,14 @@ function parseIndividualNotes(notes: string | null): { day?: string; period?: st
   } catch {
     return null
   }
+}
+
+// 個別指導の教科表示を取得するヘルパー
+function getIndividualSubjectDisplay(notes: { subject?: string; subjects?: string[] } | null): string {
+  if (!notes) return ''
+  if (notes.subjects && notes.subjects.length > 0) return notes.subjects.join('・')
+  if (notes.subject) return notes.subject
+  return ''
 }
 
 const INDIVIDUAL_FORMAT_LABELS: Record<string, string> = {
@@ -100,7 +108,7 @@ export default function AdminStudentsPage() {
         const courseName = e.course?.name?.toLowerCase() || ''
         const categoryName = e.course?.category?.name?.toLowerCase() || ''
         const notes = parseIndividualNotes(e.notes)
-        const notesSubject = notes?.subject?.toLowerCase() || ''
+        const notesSubject = getIndividualSubjectDisplay(notes).toLowerCase()
         return (
           studentName.includes(query) ||
           studentEmail.includes(query) ||
@@ -220,8 +228,8 @@ export default function AdminStudentsPage() {
                                     <span className="text-muted-foreground ml-1 text-xs">
                                       {individualNotes.day}曜 {individualNotes.period}
                                     </span>
-                                    {individualNotes.subject && (
-                                      <span className="text-muted-foreground ml-1 text-xs">/ {individualNotes.subject}</span>
+                                    {getIndividualSubjectDisplay(individualNotes) && (
+                                      <span className="text-muted-foreground ml-1 text-xs">/ {getIndividualSubjectDisplay(individualNotes)}</span>
                                     )}
                                     {individualNotes.format && (
                                       <span className="text-muted-foreground ml-1 text-xs">

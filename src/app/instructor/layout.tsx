@@ -1,31 +1,41 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { AdminSidebar } from '@/components/layout/admin-sidebar'
 import { TermProvider, TermSelector } from '@/components/term-selector'
 
 export default function InstructorLayout({ children }: { children: React.ReactNode }) {
   const { profile, loading, signOut } = useAuth()
-  const router = useRouter()
+  const redirected = useRef(false)
 
   useEffect(() => {
-    if (!loading && (!profile || profile.role !== 'instructor')) {
-      router.push('/login')
+    if (!loading && (!profile || profile.role !== 'instructor') && !redirected.current) {
+      redirected.current = true
+      window.location.href = '/login'
     }
-  }, [profile, loading, router])
+  }, [profile, loading])
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">読み込み中...</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">読み込み中...</p>
+        </div>
       </div>
     )
   }
 
   if (!profile || profile.role !== 'instructor') {
-    return null
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">リダイレクト中...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
